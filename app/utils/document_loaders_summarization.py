@@ -79,7 +79,7 @@ class FileHandler:
         unique_filename = f"{uuid.uuid4()}.{self.file_extension}"
 
         # Download the file from the URL and save it to a temporary file
-        response = requests.get(url)
+        response = requests.get(url, timeout=60)
         response.raise_for_status()  # Ensure the request was successful
 
         with tempfile.NamedTemporaryFile(delete=False, prefix=unique_filename) as temp_file:
