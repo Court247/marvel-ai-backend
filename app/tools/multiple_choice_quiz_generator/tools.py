@@ -186,10 +186,23 @@ class QuizQuestionsList(BaseModel):
                             {"key": "B", "value": "Madrid"},
                             {"key": "C", "value": "Paris"},
                             {"key": "D", "value": "Rome"},
+                        ],
                         "answer": "C",
                         "explanation": "Paris is the capital of France."
                     },
+                    {
+                        "question": "What is the official language of France?",
+                        "choices": [
+                            {"key": "A", "value": "French"},
+                            {"key": "B", "value": "English"},
+                            {"key": "C", "value": "German"},
+                            {"key": "D", "value": "Spanish"}
+                        ],
+                        "answer": "A",
+                        "explanation": "The official language of France is French."
+                    },
                 ]§
+
           """
         }
 
