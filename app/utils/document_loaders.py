@@ -22,6 +22,7 @@ import shutil
 import io
 import os
 import base64
+from security import safe_requests
 
 load_dotenv(find_dotenv())
 
@@ -124,7 +125,7 @@ class FileHandler:
 
         try:
             # Download the file from the URL and save it to a temporary file
-            response = requests.get(url, timeout=10)  
+            response = safe_requests.get(url, timeout=10)  
             response.raise_for_status()  # Raise an HTTPError for bad responses
 
             with tempfile.NamedTemporaryFile(delete=False, prefix=unique_filename) as temp_file:
@@ -445,7 +446,7 @@ def generate_docs_from_audio(audio_url: str, verbose=False):
 
     # Download the file from the URL and save it to a temporary file
     try:
-        response = requests.get(audio_url)
+        response = safe_requests.get(audio_url)
         response.raise_for_status()  # Ensure the request was successful
     except (requests.exceptions.RequestException) as req_err:
         logger.error(f"Error occurred while downloading audio: {req_err}")

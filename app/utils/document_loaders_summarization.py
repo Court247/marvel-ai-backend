@@ -21,8 +21,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 import os
 import tempfile
 import uuid
-import requests
 import gdown
+from security import safe_requests
 
 STRUCTURED_TABULAR_FILE_EXTENSIONS = {"csv", "xls", "xlsx", "gsheet", "xml"}
 
@@ -79,7 +79,7 @@ class FileHandler:
         unique_filename = f"{uuid.uuid4()}.{self.file_extension}"
 
         # Download the file from the URL and save it to a temporary file
-        response = requests.get(url)
+        response = safe_requests.get(url)
         response.raise_for_status()  # Ensure the request was successful
 
         with tempfile.NamedTemporaryFile(delete=False, prefix=unique_filename) as temp_file:
