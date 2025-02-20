@@ -23,7 +23,7 @@ def read_root():
     
     import os
     
-    file_url = os.path.join(os.getcwd(), "attached_assets", "Science_Glossary.pdf")
+    file_url = os.path.join("attached_assets", "Science_Glossary.pdf")
     
     quiz = executor(
         topic="Science Terms Vocabulary - 7th Grade Physics, Chemistry, and Biology",
