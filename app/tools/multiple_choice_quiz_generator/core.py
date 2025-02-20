@@ -21,8 +21,10 @@ def executor(topic: str,
             logger.info(f"File URL loaded: {file_url}")
         
         # Handle local file paths
-        if not file_url.startswith(('http://', 'https://', 'file://')):
-            file_url = os.path.abspath(file_url)
+        if not file_url.startswith(('http://', 'https://')):
+            file_url = os.path.join(os.getcwd(), file_url)
+            if not os.path.exists(file_url):
+                raise ValueError(f"File not found at path: {file_url}")
             
         docs = get_docs(file_url, file_type, lang, verbose=True)
 
