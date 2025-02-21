@@ -17,7 +17,22 @@ router = APIRouter()
 
 @router.get("/")
 def read_root():
-    return {"Hello": "World"}
+    from app.tools.multiple_choice_quiz_generator.core import executor
+    
+    import os
+    
+    import os
+    
+    file_url = os.path.join("attached_assets", "Science_Glossary.pdf")
+    
+    quiz = executor(
+        topic="Science Terms Vocabulary - 7th Grade Physics, Chemistry, and Biology",
+        n_questions=10,
+        file_url=file_url,
+        file_type="pdf",
+        lang="en"
+    )
+    return {"quiz": quiz}
 
 @router.post("/submit-tool", response_model=Union[ToolResponse, ErrorResponse])
 async def submit_tool( data: ToolRequest, _ = Depends(key_check)):     

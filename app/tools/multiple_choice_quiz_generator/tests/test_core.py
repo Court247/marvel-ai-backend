@@ -372,3 +372,35 @@ def test_executor_gmp3_url_invalid():
         )
 
     assert isinstance(exc_info.value, ValueError)
+def test_quiz_voting():
+    n_questions = 1
+    quiz = executor(
+        topic="test topic",
+        n_questions=n_questions,
+        file_url="https://filesamples.com/samples/document/pdf/sample1.pdf",
+        file_type="pdf",
+        lang="en"
+    )
+    
+    assert isinstance(quiz[0].get('thumbs_up', 0), int)
+    assert isinstance(quiz[0].get('thumbs_down', 0), int)
+def test_vocabulary_quiz():
+    n_questions = 10
+    quiz = executor(
+        topic="Science Terms Vocabulary",
+        n_questions=n_questions,
+        file_url="attached_assets/Science_Glossary.pdf",
+        file_type="pdf",
+        lang="en"
+    )
+    
+    assert isinstance(quiz, list)
+    assert len(quiz) == n_questions
+    # Check if questions contain vocabulary-related content
+    for question in quiz:
+        assert 'question' in question
+        assert 'choices' in question
+        assert 'answer' in question
+        assert 'explanation' in question
+        assert isinstance(question.get('thumbs_up', 0), int)
+        assert isinstance(question.get('thumbs_down', 0), int)
