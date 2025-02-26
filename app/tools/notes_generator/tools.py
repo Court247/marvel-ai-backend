@@ -1,58 +1,60 @@
 from langchain_chroma import Chroma
 from langchain_google_genai import GoogleGenerativeAI
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain.chains import RetrievalQA
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.documents import Document
-from typing import Optional, List
+from typing import Optional, List, Union
 from app.services.logger import setup_logger
-from pydantic import BaseModel
-
+from pydantic import BaseModel, Field
 
 logger = setup_logger(__name__)
-class GenerateNotesOutput(BaseModel):
-    title: str
-    notes: str
 
+# Define Models to Match the Presentation Tool
 class BulletPoints(BaseModel):
-    title: str
-    points: List[str]
+    title: str = Field(..., description="The title of the notes section")
+    points: List[str] = Field(..., description="Key bullet points extracted from the content")
 
 class Paragraph(BaseModel):
-    title: str
-    content: str
+    title: str = Field(..., description="The title of the notes section")
+    content: str = Field(..., description="A well-structured paragraph summarizing the content")
 
 class Table(BaseModel):
-    title: str
-    rows: List[List[str]]
+    title: str = Field(..., description="The title of the table section")
+    headers: List[str] = Field(..., description="Column headers for the table")
+    rows: List[List[str]] = Field(..., description="Table rows containing structured data")
+
 
 class NoteGeneratorPipeline:
     def __init__(self, args=None , verbose=False):       
         self.args = args
         self.verbose = verbose
-        parsers = {
-            "bullet points": JsonOutputParser(pydantic_object=BulletPoints),
-            "paragraph": JsonOutputParser(pydantic_object=Paragraph),
-            "table": JsonOutputParser(pydantic_object=Table),
+        """Dynamically selects the correct output schema based on page_layout."""
+        layout_map = {
+            "bullet_points": BulletPoints,
+            "paragraph": Paragraph,
+            "table": Table
         }
-        self.parsers = parsers[args.page_layout]  if self.args!= None else None
+
+        selected_format = layout_map.get(self.args.page_layout)
+        self.parser = JsonOutputParser(pydantic_object=selected_format)
+       
+        
         self.model = GoogleGenerativeAI(model="gemini-1.5-pro")
         self.vectorstore_class = Chroma
         self.vectorstore = None
         self.retriever = None
-          
-    def compile_vectorstore(self, documents: List[str]):
+
+    def compile_vectorstore(self, documents: List[Document]):
         """Creates a vector store for document retrieval."""
         if self.verbose:
             logger.info("Creating vectorstore from documents...")
+            
         self.vectorstore = self.vectorstore_class.from_documents(
             documents, 
             GoogleGenerativeAIEmbeddings(model="models/embedding-001")
         )
-        print("vector store",self.vectorstore)
         self.retriever = self.vectorstore.as_retriever()
-        print("retriever",self.retriever)
         
         if self.verbose:
             logger.info("Vectorstore and retriever created successfully.")
@@ -62,79 +64,46 @@ class NoteGeneratorPipeline:
         return self.retriever.invoke(query)
 
     def compile_pipeline(self):
-        """Creates prompt templates for different layouts."""
-        layout_templates = {
-            "bullet points": PromptTemplate(
-                template=(
-                    "Generate structured notes as bullet points focusing on: {focus}. "
-                    "Use the following text: {context}. "
-                    "Ensure the output is concise and well-formatted. "
-                    "Respond in the {lang} language."
-                ),
-                input_variables=["focus", "context", "lang"],
-                partial_variables={"format_instructions": self.parsers.get_format_instructions()},
+        """Creates prompt templates for structured note generation."""
+        prompt_template = PromptTemplate(
+            template=(
+                "Generate structured notes in {layout} format focusing on: {focus}. "
+                "Use the following text: {context}. "
+                "Ensure clarity, coherence, and well-structured content. "
+                "Respond in the {lang} language. "
+                "Your response must follow this JSON format: {format_instructions}"
             ),
-            "paragraph": PromptTemplate(
-                template=(
-                    "Summarize the key points in a well-structured paragraph focusing on: {focus}. "
-                    "Use the following text: {context}. "
-                    "Ensure clarity, coherence, and completeness. "
-                    "Respond in the {lang} language."
-                ),
-                input_variables=["focus", "context", "lang"],
-                partial_variables={"format_instructions": self.parsers.get_format_instructions()},
-            ),
-            "table": PromptTemplate(
-                template=(
-                    "Generate a structured table summarizing the key information focusing on: {focus}. "
-                    "Use the following text: {context}. "
-                    "Ensure the table is well-organized, with clear headers and concise content. "
-                    "Respond in the {lang} language."
-                ),
-                input_variables=["focus", "context", "lang"],
-                partial_variables={"format_instructions": self.parsers.get_format_instructions()},
-            ),
-        }
+            input_variables=["layout", "focus", "context", "lang"],
+            partial_variables={"format_instructions": self.parser.get_format_instructions()},
+        )
 
-        # Select the prompt template based on page_layout
-        if self.args.page_layout not in layout_templates:
-            raise ValueError("Invalid page_layout. Choose 'bullet points', 'paragraph', or 'table'.")
+        return prompt_template | self.model | self.parser
 
-        return layout_templates[self.args.page_layout] | self.model
-
-    def generate_notes(self,documents: Optional[List[Document]]):
+    def generate_notes(self, documents: Optional[List[Document]]):
         """Generates notes based on the selected layout."""
-        # If a file is uploaded, process it   
-        
-        # If documents are available, store them and retrieve relevant context
         if documents:
             self.compile_vectorstore(documents)
             query = "Provide general context for the topic to create notes."
             context = self.generate_context(query)
-            
         else:
-            context = ""  # Use manually provided text if no file is uploaded
+            context = ""
 
         # Compile the processing pipeline
         pipeline = self.compile_pipeline()
 
         # Prepare inputs for the AI model
         inputs = {
+            "layout": self.args.page_layout,
             "focus": self.args.focus,
             "context": context,
-            "lang": self.args.lang
+            "lang": self.args.lang,
         }
 
         try:
             result = pipeline.invoke(inputs)
-            feedback = GenerateNotesOutput(
-                title=f'Generated Notes in {self.args.page_layout} format',
-                notes=result
-            )
-
             if self.verbose:
                 logger.info("Notes successfully generated.")
-            return feedback
+            return result
         except Exception as e:
             logger.error(f"Error generating notes: {e}")
             raise ValueError("Failed to generate notes.")
