@@ -162,3 +162,17 @@ class NoteGeneratorArgs(BaseModel):
     file_upload_type: str
     file_upload_url: str
     lang: Optional[str] = "en"
+
+class OutlineGeneratorInput(BaseModel):
+    n_slides: int
+    topic: str
+    instructional_level: str
+    file_upload_url: str
+    file_upload_type: str
+    lang: Optional[str] = "en"
+
+class SlideGeneratorInput(BaseModel):
+    slides_titles: List[str]
+    instructional_level: str
+    topic: str
+    lang: Optional[str] = "en"

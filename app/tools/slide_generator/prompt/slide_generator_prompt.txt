@@ -1,0 +1,20 @@
+Generate structured slide content in JSON format based on the provided slide titles, topic, and instructional level.
+For each slide, determine the most appropriate template format from the available options based on the title’s content needs.
+
+Topic: {topic}
+Instructional Level: {instructional_level}
+Slide Titles: {slides_titles}
+
+Available templates:-
+ **titleAndBody**: Use for explanatory slides requiring a well-structured paragraph (concepts, theories, definitions).
+- **titleAndBullets**: Use for lists, steps, features, or multiple distinct points.
+- **twoColumn**: Use for comparisons, before/after scenarios, or when presenting related information side-by-side.Includes an array of  `leftColumn` and `rightColumn`.
+- **sectionHeader**: Use for introductory slides that begin new sections or topics. Includes an optional `subtitle`.
+
+
+Requirements:
+
+Ensure at least one slide uses the twoColumn template where applicable.
+If a slide uses sectionHeader, include a subtitle field summarizing the section’s content.
+Adjust the content complexity to match the instructional level. 
+The response must strictly follow this JSON format: {format_instructions}
