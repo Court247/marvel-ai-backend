@@ -4,7 +4,7 @@ from app.services.logger import setup_logger
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_google_genai import GoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import RunnableParallel
+from langchain_core.runnables import RunnableParallel  # (still used for the parallel branch)
 from app.services.schemas import SyllabusGeneratorArgsModel
 from fastapi import HTTPException
 
@@ -53,113 +53,153 @@ class SyllabusGeneratorPipeline:
             "course_schedule": JsonOutputParser(pydantic_object=CourseScheduleItem),
         }
 
-    def compile(self):
+    # ===== NEW METHOD: compile_sequential() to build a hybrid pipeline =====
+    def compile_sequential(self):
         try:
-            prompts = {
-                "course_information": PromptTemplate(
-                    template=(
-                        "Generate a detailed and structured course information in {lang} based on:\n\n"
-                        "Grade Level: {grade_level}\n"
-                        "Subject: {subject}\n"
-                        "Course Description: {course_description}\n"
-                        "Summary: {summary}\n\n"
-                        "Ensure the response is professional and comprehensive.\n{format_instructions}"
-                    ),
-                    input_variables=["grade_level", "subject", "course_description", "lang", "summary"],
-                    partial_variables={"format_instructions": self.parsers["course_information"].get_format_instructions()},
+            # --- Chain for course_information (sequential step 1) ---
+            course_info_prompt = PromptTemplate(
+                template=(
+                    "Generate a detailed and structured course information in {lang} based on:\n\n"
+                    "Grade Level: {grade_level}\n"
+                    "Subject: {subject}\n"
+                    "Course Description: {course_description}\n"
+                    "Summary: {summary}\n\n"
+                    "Ensure the response is professional and comprehensive.\n{format_instructions}"
                 ),
-                "course_description_objectives": PromptTemplate(
-                    template=(
-                        "Develop detailed course objectives and intended learning outcomes in {lang}:\n\n"
-                        "Objectives: {objectives}\n"
-                        "Summary: {summary}\n\n"
-                        "Provide measurable goals and realistic expectations for students.\n{format_instructions}"
-                    ),
-                    input_variables=["objectives", "lang", "summary"],
-                    partial_variables={"format_instructions": self.parsers["course_description_objectives"].get_format_instructions()},
-                ),
-                "course_content": PromptTemplate(
-                    template=(
-                        "Create a detailed course content structure in {lang}:\n\n"
-                        "Course Outline: {course_outline}\n"
-                        "Summary: {summary}\n\n"
-                        "Include topics, time frames, and key learning points.\n{format_instructions}"
-                    ),
-                    input_variables=["course_outline", "lang", "summary"],
-                    partial_variables={"format_instructions": self.parsers["course_content"].get_format_instructions()},
-                ),
-                "policies_procedures": PromptTemplate(
-                    template=(
-                        "Draft clear and professional course policies and procedures in {lang}:\n\n"
-                        "Grading Policy: {grading_policy}\n"
-                        "Class Policies and Expectations: {policies_expectations}\n"
-                        "Summary: {summary}\n\n"
-                        "Ensure all rules and expectations are outlined clearly.\n{format_instructions}"
-                    ),
-                    input_variables=["grading_policy", "policies_expectations", "lang", "summary"],
-                    partial_variables={"format_instructions": self.parsers["policies_procedures"].get_format_instructions()},
-                ),
-                "assessment_grading_criteria": PromptTemplate(
-                    template=(
-                        "Define assessment methods and grading criteria in {lang}:\n\n"
-                        "Grading Policy: {grading_policy}\n"
-                        "Summary: {summary}\n\n"
-                        "Ensure that assessment methods and the grading scale are precise and easy to understand.\n{format_instructions}"
-                    ),
-                    input_variables=["grading_policy", "lang", "summary"],
-                    partial_variables={"format_instructions": self.parsers["assessment_grading_criteria"].get_format_instructions()},
-                ),
-                "learning_resources": PromptTemplate(
-                    template=(
-                        "Generate a comprehensive list of recommended learning resources in {lang}:\n\n"
-                        "Required Materials: {required_materials}\n"
-                        "Summary: {summary}\n\n"
-                        "Include titles, authors, and publication years of the materials.\n{format_instructions}"
-                    ),
-                    input_variables=["required_materials", "lang", "summary"],
-                    partial_variables={"format_instructions": self.parsers["learning_resources"].get_format_instructions()},
-                ),
-                "course_schedule": PromptTemplate(
-                    template=(
-                        "Construct a detailed course schedule in {lang}:\n\n"
-                        "Course Outline: {course_outline}\n"
-                        "Summary: {summary}\n\n"
-                        "Ensure the schedule includes dates, activities, and key topics.\n{format_instructions}"
-                    ),
-                    input_variables=["course_outline", "lang", "summary"],
-                    partial_variables={"format_instructions": self.parsers["course_schedule"].get_format_instructions()},
-                ),
-            }
+                input_variables=["grade_level", "subject", "course_description", "lang", "summary"],
+                partial_variables={"format_instructions": self.parsers["course_information"].get_format_instructions()},
+            )
+            self.chain_course_information = course_info_prompt | self.model | self.parsers["course_information"]
 
-            chains = {
-                key: prompt | self.model | self.parsers[key]
-                for key, prompt in prompts.items()
-            }
+            # --- Chain for course_description_objectives (sequential step 1 parallel branch) ---
+            course_desc_obj_prompt = PromptTemplate(
+                template=(
+                    "Develop detailed course objectives and intended learning outcomes in {lang}:\n\n"
+                    "Objectives: {objectives}\n"
+                    "Summary: {summary}\n\n"
+                    "Provide measurable goals and realistic expectations for students.\n{format_instructions}"
+                ),
+                input_variables=["objectives", "lang", "summary"],
+                partial_variables={"format_instructions": self.parsers["course_description_objectives"].get_format_instructions()},
+            )
+            self.chain_course_description_objectives = course_desc_obj_prompt | self.model | self.parsers["course_description_objectives"]
 
-            parallel_pipeline = RunnableParallel(branches=chains)
+            # --- Chain for course_content (sequential step 2, uses output from course_information) ---
+            course_content_prompt = PromptTemplate(
+                template=(
+                    "Using the following course information, generate a detailed course content outline in {lang}:\n\n"
+                    "Course Information: {course_information}\n"
+                    "Course Outline: {course_outline}\n"
+                    "Summary: {summary}\n\n"
+                    "Include topics, time frames, and key learning points.\n{format_instructions}"
+                ),
+                input_variables=["course_information", "course_outline", "lang", "summary"],
+                partial_variables={"format_instructions": self.parsers["course_content"].get_format_instructions()},
+            )
+            self.chain_course_content = course_content_prompt | self.model | self.parsers["course_content"]
+
+            # --- Chain for policies_procedures (sequential step 3) ---
+            policies_prompt = PromptTemplate(
+                template=(
+                    "Draft clear and professional course policies and procedures in {lang}:\n\n"
+                    "Grading Policy: {grading_policy}\n"
+                    "Class Policies and Expectations: {policies_expectations}\n"
+                    "Summary: {summary}\n\n"
+                    "Ensure all rules and expectations are outlined clearly.\n{format_instructions}"
+                ),
+                input_variables=["grading_policy", "policies_expectations", "lang", "summary"],
+                partial_variables={"format_instructions": self.parsers["policies_procedures"].get_format_instructions()},
+            )
+            self.chain_policies_procedures = policies_prompt | self.model | self.parsers["policies_procedures"]
+
+            # --- Parallel chains for assessment, learning resources, course schedule ---
+            assessment_prompt = PromptTemplate(
+                template=(
+                    "Define assessment methods and grading criteria in {lang}:\n\n"
+                    "Grading Policy: {grading_policy}\n"
+                    "Summary: {summary}\n\n"
+                    "Ensure that assessment methods and the grading scale are precise and easy to understand.\n{format_instructions}"
+                ),
+                input_variables=["grading_policy", "lang", "summary"],
+                partial_variables={"format_instructions": self.parsers["assessment_grading_criteria"].get_format_instructions()},
+            )
+            self.chain_assessment_grading_criteria = assessment_prompt | self.model | self.parsers["assessment_grading_criteria"]
+
+            learning_resources_prompt = PromptTemplate(
+                template=(
+                    "Generate a comprehensive list of recommended learning resources in {lang}:\n\n"
+                    "Required Materials: {required_materials}\n"
+                    "Summary: {summary}\n\n"
+                    "Include titles, authors, and publication years of the materials.\n{format_instructions}"
+                ),
+                input_variables=["required_materials", "lang", "summary"],
+                partial_variables={"format_instructions": self.parsers["learning_resources"].get_format_instructions()},
+            )
+            self.chain_learning_resources = learning_resources_prompt | self.model | self.parsers["learning_resources"]
+
+            course_schedule_prompt = PromptTemplate(
+                template=(
+                    "Construct a detailed course schedule in {lang}:\n\n"
+                    "Course Outline: {course_outline}\n"
+                    "Summary: {summary}\n\n"
+                    "Ensure the schedule includes dates, activities, and key topics.\n{format_instructions}"
+                ),
+                input_variables=["course_outline", "lang", "summary"],
+                partial_variables={"format_instructions": self.parsers["course_schedule"].get_format_instructions()},
+            )
+            self.chain_course_schedule = course_schedule_prompt | self.model | self.parsers["course_schedule"]
+
+            # Build a parallel pipeline for the chains that can be executed concurrently
+            self.parallel_pipeline = RunnableParallel(branches={
+                "assessment_grading_criteria": self.chain_assessment_grading_criteria,
+                "learning_resources": self.chain_learning_resources,
+                "course_schedule": self.chain_course_schedule,
+            })
 
             if self.verbose:
-                logger.info("Successfully compiled the parallel pipeline.")
+                logger.info("Successfully compiled the hybrid sequential and parallel pipeline.")
 
         except Exception as e:
             logger.error(f"Failed to compile LLM pipeline: {e}")
             raise HTTPException(status_code=500, detail="Failed to compile LLM pipeline.")
 
-        return parallel_pipeline
+    # ===== END NEW METHOD =====
 
+# ===== Updated generate_syllabus() to use the new hybrid pipeline =====
 def generate_syllabus(request_args: SyllabusRequestArgs, verbose=True):
     try:
         pipeline = SyllabusGeneratorPipeline(verbose=verbose)
-        chain = pipeline.compile()
-        outputs = chain.invoke(request_args.to_dict())
+        # Compile the new hybrid pipeline (sequential + parallel)
+        pipeline.compile_sequential()
+
+        # Convert request args to dictionary
+        request_dict = request_args.to_dict()
+
+        # --- Step 1: Generate course_information ---
+        course_information = pipeline.chain_course_information.invoke(request_dict)
+        # Inject the output into the request for chained prompts
+        request_dict["course_information"] = course_information
+
+        # --- Step 2: Generate course_description_objectives ---
+        course_description_objectives = pipeline.chain_course_description_objectives.invoke(request_dict)
+
+        # --- Step 3: Generate course_content using the chained course_information ---
+        course_content = pipeline.chain_course_content.invoke(request_dict)
+
+        # --- Step 4: Generate policies_procedures ---
+        policies_procedures = pipeline.chain_policies_procedures.invoke(request_dict)
+
+        # --- Step 5: Generate parallel outputs for assessment, learning resources, course schedule ---
+        parallel_outputs = pipeline.parallel_pipeline.invoke(request_dict)
+
         model = SyllabusSchema(
-            course_information=outputs["branches"]["course_information"],
-            course_description_objectives=outputs["branches"]["course_description_objectives"],
-            course_content=outputs["branches"]["course_content"],
-            policies_procedures=outputs["branches"]["policies_procedures"],
-            assessment_grading_criteria=outputs["branches"]["assessment_grading_criteria"],
-            learning_resources=outputs["branches"]["learning_resources"],
-            course_schedule=outputs["branches"]["course_schedule"],
+            course_information=course_information,
+            course_description_objectives=course_description_objectives,
+            course_content=course_content,
+            policies_procedures=policies_procedures,
+            assessment_grading_criteria=parallel_outputs["branches"]["assessment_grading_criteria"],
+            learning_resources=parallel_outputs["branches"]["learning_resources"],
+            course_schedule=parallel_outputs["branches"]["course_schedule"],
         )
         return dict(model)
 
@@ -167,7 +207,8 @@ def generate_syllabus(request_args: SyllabusRequestArgs, verbose=True):
         logger.error(f"Failed to generate syllabus: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate syllabus from LLM.")
 
-    
+
+# ------------------ Existing Schema Definitions (unchanged) ------------------
 class CourseInformation(BaseModel):
     course_title: str = Field(description="The course title")
     grade_level: str = Field(description="The grade level")
