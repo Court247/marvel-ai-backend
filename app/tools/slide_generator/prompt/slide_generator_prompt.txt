@@ -6,15 +6,13 @@ Instructional Level: {instructional_level}
 Slide Titles: {slides_titles}
 
 Available templates:-
- **titleAndBody**: Use for explanatory slides requiring a well-structured paragraph (concepts, theories, definitions).
-- **titleAndBullets**: Use for lists, steps, features, or multiple distinct points.
-- **twoColumn**: Use for comparisons, before/after scenarios, or when presenting related information side-by-side.Includes an array of  `leftColumn` and `rightColumn`.
-- **sectionHeader**: Use for introductory slides that begin new sections or topics. Includes an optional `subtitle`.
-
-
+- titleAndBody: Use for explanatory slides requiring a well-structured paragraph (concepts, theories, definitions).
+- titleAndBullets: Use for lists, steps, features, or multiple distinct points.Includes list of bullet points
+- twoColumn: Use for comparisons, before/after scenarios, or when presenting related information side-by-side. Includes `leftColumn` and `rightColumn` inside the content.
+- sectionHeader: Use for introductory slides that begin new sections or topics. The `content` field should include 'title'  an eye-catching summary of the slide title. Additionally, include an optional `subtitle` field that briefly summarizes the section’s content, if applicable.
+Create the response making sure all the requirements are met.
 Requirements:
-
-Ensure at least one slide uses the twoColumn template where applicable.
-If a slide uses sectionHeader, include a subtitle field summarizing the section’s content.
-Adjust the content complexity to match the instructional level. 
-The response must strictly follow this JSON format: {format_instructions}
+- Ensure at least one slide uses the twoColumn template if the title presents the related information/comparision.
+- Adjust the content complexity to match the instructional level.
+- The response should avoid  markdown formatting and line breaks (`\n`) 
+- The response must strictly follow this JSON format: {format_instructions} 
