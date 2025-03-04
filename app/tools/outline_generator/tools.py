@@ -114,7 +114,7 @@ class OutlineGenerator:
         if(documents):
             if self.verbose: print(f"Deleting vectorstore")
             self.vectorstore.delete_collection()
-
+        print("type",type(response))
         return response
 
 

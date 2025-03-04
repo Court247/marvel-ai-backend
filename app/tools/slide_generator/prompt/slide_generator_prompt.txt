@@ -7,6 +7,7 @@ For each slide:
 - Use clear, structured formatting for readability (e.g., short paragraphs, bullet points where beneficial).
 - Ensure at least one slide uses the twoColumn template for comparisons or related information.
 - Avoid markdown formatting and line breaks (`\n`).
+
 Topic: {topic}
 Instructional Level: {instructional_level}
 Slide Titles: {slides_titles}

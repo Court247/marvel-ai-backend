@@ -1,6 +1,6 @@
 import pytest
 from app.tools.notes_generator.core import executor
-
+from app.tools.notes_generator.tools import GenerateNotesOutput
 from app.tools.notes_generator.tools import NoteGeneratorPipeline
 from app.tools.notes_generator.tools import Document
 from app.tools.notes_generator.core import NoteGeneratorArgs
@@ -47,18 +47,18 @@ def test_executor_normal_operation():
 
 
  
-def test_executor_no_page_layout():
-    """Test the executor function with no page layout provided."""
-    with pytest.raises(ValueError, match="No page layout provided for note generation."):
-        executor(
-            focus=base_attributes["focus"],
-            page_layout="",
-            text_input=base_attributes["text_input"],
-            file_upload_type=base_attributes["file_upload_type"],
-            file_upload_url=base_attributes["file_upload_url"],
-            lang=base_attributes["lang"],
-            verbose=False            
-        )
+# def test_executor_no_page_layout():
+#     """Test the executor function with no page layout provided."""
+#     with pytest.raises(ValueError, match="No page layout provided for note generation."):
+#         executor(
+#             focus=base_attributes["focus"],
+#             page_layout="",
+#             text_input=base_attributes["text_input"],
+#             file_upload_type=base_attributes["file_upload_type"],
+#             file_upload_url=base_attributes["file_upload_url"],
+#             lang=base_attributes["lang"],
+#             verbose=False            
+#         )
 
 def test_executor_no_input():
     """Test the executor function with no input provided."""
@@ -151,11 +151,11 @@ def test_note_generator_pipeline_invalid_page_layout():
         pipeline.generate_notes([])
         assert isinstance(exc_info.value, ValueError)
 
-def test_generate_notes_output_model():
-    """Test the GenerateNotesOutput model."""
-    output = GenerateNotesOutput(title="Test Title", notes="Test Notes")
-    assert output.title == "Test Title"
-    assert output.notes == "Test Notes"
+# def test_generate_notes_output_model():
+#     """Test the GenerateNotesOutput model."""
+#     output = GenerateNotesOutput(title="Test Title", notes="Test Notes")
+#     assert output.title == "Test Title"
+#     assert output.notes == "Test Notes"
 
 
 

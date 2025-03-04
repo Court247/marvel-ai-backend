@@ -214,8 +214,8 @@ class SlideGenerator:
 class Slide(BaseModel):
     title: str = Field(..., description="The title of the slide")
     template: str = Field(..., description="The slide template type: sectionHeader, titleAndBody, titleAndBullets, twoColumn")
-    content: Optional[Union[str, list, dict, Any]] = Field(None, description="Content of the slide, can be string, list, dict, or any type")
-
+    #content: Optional[Union[str, list, dict, Any]] = Field(None, description="Content of the slide, can be string, list, dict, or any type")
+    content: str | list | dict | Any = Field(None, description="Content of the slide, can be string, list, dict, or any type")
 
 class SlidePresentation(BaseModel):
     slides: List[Slide] = Field(..., description="The complete set of slides in the presentation")

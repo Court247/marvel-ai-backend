@@ -25,7 +25,7 @@ class Table(BaseModel):
     rows: List[List[str]] = Field(..., description="Table rows containing structured data")
 class GenerateNotesOutput(BaseModel):
     title: str = Field(..., description="Title of the generated notes")
-    notes:Optional[ Union[ BulletPoints, Paragraph, Table]] = Field(..., description="Generated notes in the specified format")
+    notes: BulletPoints | Paragraph | Table = Field(..., description="Structured notes generated based on the content")
 
 class NoteGeneratorPipeline:
     def __init__(self, args=None , verbose=False):       
@@ -39,8 +39,7 @@ class NoteGeneratorPipeline:
         }
 
         selected_format = layout_map.get(self.args.page_layout)
-        self.parser = JsonOutputParser(pydantic_object=selected_format)
-       
+        self.parser = JsonOutputParser(pydantic_object=selected_format)   
         
         self.model = GoogleGenerativeAI(model="gemini-1.5-pro")
         self.vectorstore_class = Chroma
@@ -66,6 +65,7 @@ class NoteGeneratorPipeline:
         return self.retriever.invoke(query)
 
     def compile_pipeline(self):
+        """Creates prompt templates for different layouts."""
         """Creates prompt templates for structured note generation."""
         prompt_template = PromptTemplate(
             template=(
@@ -74,11 +74,10 @@ class NoteGeneratorPipeline:
                 "Ensure clarity, coherence, and well-structured content. "
                 "Respond in the {lang} language. "
                 "Your response must follow this JSON format: {format_instructions}"
-            ),
+             ),
             input_variables=["layout", "focus", "context", "lang"],
             partial_variables={"format_instructions": self.parser.get_format_instructions()},
         )
-
         return prompt_template | self.model | self.parser
 
     def generate_notes(self, documents: Optional[List[Document]]):
@@ -103,6 +102,7 @@ class NoteGeneratorPipeline:
 
         try:
             result = pipeline.invoke(inputs)
+            
             if self.verbose:
                 logger.info("Notes successfully generated.")
             return result

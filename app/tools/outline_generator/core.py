@@ -17,6 +17,7 @@ def executor(
     try:
         if (not (n_slides and topic and instructional_level)):
             logger.info(f"Missing required inputs.")
+            raise ValueError("Missing required inputs.")
          
         if(n_slides and topic and instructional_level):
             logger.info(f"Generating slide outlines. from {topic} for {instructional_level} level")
