@@ -563,7 +563,7 @@ class QuizQuestionsList(BaseModel):
                         "answer": "A",
                         "explanation": "The official language of France is French."
                     },
-                ]§
+                ]
 
           """
         }
