@@ -8,6 +8,9 @@ from langchain_core.runnables import RunnableParallel  # (still used for the par
 from app.services.schemas import SyllabusGeneratorArgsModel
 from fastapi import HTTPException
 
+import langsmith as ls
+from langsmith.run_trees import RunTree
+
 logger = setup_logger(__name__)
 
 class SyllabusRequestArgs:
@@ -151,9 +154,9 @@ class SyllabusGeneratorPipeline:
 
             # Build a parallel pipeline for the chains that can be executed concurrently
             self.parallel_pipeline = RunnableParallel(branches={
-                "assessment_grading_criteria": self.chain_assessment_grading_criteria,
-                "learning_resources": self.chain_learning_resources,
-                "course_schedule": self.chain_course_schedule,
+                "assessment_grading_criteria": self.chain_assessment_grading_criteria.with_config(run_name="AssessmentGradingCriteria"),
+                "learning_resources": self.chain_learning_resources.with_config(run_name="LearningResources"),
+                "course_schedule": self.chain_course_schedule.with_config(run_name="CourseSchedule"),
             })
 
             if self.verbose:
@@ -168,44 +171,48 @@ class SyllabusGeneratorPipeline:
 # ===== Updated generate_syllabus() to use the new hybrid pipeline =====
 def generate_syllabus(request_args: SyllabusRequestArgs, verbose=True):
     try:
+        
         pipeline = SyllabusGeneratorPipeline(verbose=verbose)
         # Compile the new hybrid pipeline (sequential + parallel)
         pipeline.compile_sequential()
 
         # Convert request args to dictionary
         request_dict = request_args.to_dict()
+        with ls.trace("Syllabus Pipeline", "chain", project_name="syllabus_generator", inputs=request_dict) as rt:
+            # --- Step 1: Generate course_information ---
+            course_information = pipeline.chain_course_information.invoke(request_dict, {"run_name": "CourseInformation"})
+            # Inject the output into the request for chained prompts
+            request_dict["course_information"] = course_information
 
-        # --- Step 1: Generate course_information ---
-        course_information = pipeline.chain_course_information.invoke(request_dict)
-        # Inject the output into the request for chained prompts
-        request_dict["course_information"] = course_information
+            # --- Step 2: Generate course_description_objectives ---
+            course_description_objectives = pipeline.chain_course_description_objectives.invoke(request_dict, {"run_name": "DescriptionObjectives"})
 
-        # --- Step 2: Generate course_description_objectives ---
-        course_description_objectives = pipeline.chain_course_description_objectives.invoke(request_dict)
+            # --- Step 3: Generate course_content using the chained course_information ---
+            course_content = pipeline.chain_course_content.invoke(request_dict, {"run_name": "CourseContent"})
 
-        # --- Step 3: Generate course_content using the chained course_information ---
-        course_content = pipeline.chain_course_content.invoke(request_dict)
+            # --- Step 4: Generate policies_procedures ---
+            policies_procedures = pipeline.chain_policies_procedures.invoke(request_dict, {"run_name": "PoliciesProcedures"})
 
-        # --- Step 4: Generate policies_procedures ---
-        policies_procedures = pipeline.chain_policies_procedures.invoke(request_dict)
+            # --- Step 5: Generate parallel outputs for assessment, learning resources, course schedule ---
+            parallel_outputs = pipeline.parallel_pipeline.invoke(request_dict, {"run_name": "ParallelBranches"})
 
-        # --- Step 5: Generate parallel outputs for assessment, learning resources, course schedule ---
-        parallel_outputs = pipeline.parallel_pipeline.invoke(request_dict)
+            model = SyllabusSchema(
+                course_information=course_information,
+                course_description_objectives=course_description_objectives,
+                course_content=course_content,
+                policies_procedures=policies_procedures,
+                assessment_grading_criteria=parallel_outputs["branches"]["assessment_grading_criteria"],
+                learning_resources=parallel_outputs["branches"]["learning_resources"],
+                course_schedule=parallel_outputs["branches"]["course_schedule"],
+            )
 
-        model = SyllabusSchema(
-            course_information=course_information,
-            course_description_objectives=course_description_objectives,
-            course_content=course_content,
-            policies_procedures=policies_procedures,
-            assessment_grading_criteria=parallel_outputs["branches"]["assessment_grading_criteria"],
-            learning_resources=parallel_outputs["branches"]["learning_resources"],
-            course_schedule=parallel_outputs["branches"]["course_schedule"],
-        )
-        return dict(model)
+            rt.end(outputs={"output": model})
+            return dict(model)
 
     except Exception as e:
         logger.error(f"Failed to generate syllabus: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate syllabus from LLM.")
+ 
 
 
 # ------------------ Existing Schema Definitions (unchanged) ------------------
