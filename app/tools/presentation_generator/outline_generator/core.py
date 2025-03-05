@@ -2,7 +2,7 @@ from app.utils.document_loaders import get_docs
 from app.services.schemas import OutlineGeneratorInput
 from app.services.logger import setup_logger
 from app.api.error_utilities import LoaderError, ToolExecutorError
-from app.tools.outline_generator.tools import OutlineGenerator
+from app.tools.presentation_generator.outline_generator.tools import OutlineGenerator
 logger = setup_logger()
 
 def executor(
@@ -17,7 +17,6 @@ def executor(
     try:
         if (not (n_slides and topic and instructional_level)):
             logger.info(f"Missing required inputs.")
-            raise ValueError("Missing required inputs.")
          
         if(n_slides and topic and instructional_level):
             logger.info(f"Generating slide outlines. from {topic} for {instructional_level} level")

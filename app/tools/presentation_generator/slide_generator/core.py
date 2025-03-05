@@ -2,9 +2,26 @@
 from app.api.error_utilities import LoaderError, ToolExecutorError
 from typing import List
 from app.services.schemas import SlideGeneratorInput
-from app.tools.slide_generator.tools import SlideGenerator
+from app.tools.presentation_generator.slide_generator.tools import SlideGenerator
 from app.services.logger import setup_logger
 logger = setup_logger()
+
+@pytest.fixture
+def mock_slide_data():
+    return {
+        "slides": [
+            {
+                "title": "Introduction to Python",
+                "template": "titleAndBullets",
+                "content": ["Python is a programming language"]
+            },
+            {
+                "title": "Basic Syntax",
+                "template": "titleBody",
+                "content": "Python syntax is simple"
+            }
+        ]
+    }
 
 def executor(
              slides_titles: List[str],
@@ -12,7 +29,7 @@ def executor(
              instructional_level: str,
              lang: str, 
              verbose=False):
-    try:
+    try: 
         if (not (slides_titles and topic and instructional_level)):
             logger.info(f"Missing required inputs.")
          

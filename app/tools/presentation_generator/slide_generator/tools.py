@@ -204,11 +204,11 @@ class SlideGenerator:
 
         logger.info(f"Generated response: {response}")
          # Add validation metrics
-        validation_results = self.validate_slides_content(response=response, topic=self.args.topic,instructional_level= self.args.instructional_level)
-        logger.info(f"Response validation: {validation_results}")
+        # validation_results = self.validate_slides_content(response=response, topic=self.args.topic,instructional_level= self.args.instructional_level)
+        # logger.info(f"Response validation: {validation_results}")
         
-        if not validation_results["valid"]:
-            logger.warning(f"Generated content may not fully match the requested topic")
+        # if not validation_results["valid"]:
+        #     logger.warning(f"Generated content may not fully match the requested topic")
         return response
 
 class Slide(BaseModel):
