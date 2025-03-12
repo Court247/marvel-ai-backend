@@ -442,10 +442,10 @@ class SyllabusGeneratorPipeline:
 
             # Build a parallel pipeline for the chains that can be executed concurrently
             parallel_pipeline = RunnableParallel(
-                branches={
+                {
                     "assessment_grading_criteria": chains["assessment_grading_criteria"],
                     "learning_resources": chains["learning_resources"],
-                    "course_schedule": chains["course_schedule"],
+                    "course_schedule": chains["course_schedule"]
                 }
             )
 
@@ -572,9 +572,9 @@ class SyllabusGenerator:
                     course_description_objectives=course_description_objectives,
                     course_content=course_content,
                     policies_procedures=policies_procedures,
-                    assessment_grading_criteria=parallel_outputs["branches"]["assessment_grading_criteria"],
-                    learning_resources=parallel_outputs["branches"]["learning_resources"],
-                    course_schedule=parallel_outputs["branches"]["course_schedule"],
+                    assessment_grading_criteria=parallel_outputs["assessment_grading_criteria"],
+                    learning_resources=parallel_outputs["learning_resources"],
+                    course_schedule=parallel_outputs["course_schedule"],
                 )
                 logger.info("Syllabus generated successfully.")
 
