@@ -264,13 +264,13 @@ class PromptFactory:
             input_variables=["course_outline", "lang", "course_title", "grade_level", "course_resumed_content"],
             partial_variables={"format_instructions": parser_intructions},
         )
-
 class LLMCache:
-    """Simple cache for LLM responses to reduce redundant calls."""
+    """LRU cache for LLM responses to reduce redundant calls."""
     
     def __init__(self, max_size=100):
         self.cache = {}
         self.max_size = max_size
+        self.access_order = []  # Track access order for LRU implementation
     
     def _get_key(self, input_dict):
         """Create a deterministic hash from the input dictionary."""
@@ -281,15 +281,32 @@ class LLMCache:
     def get(self, input_dict):
         """Retrieve cached result if available."""
         key = self._get_key(input_dict)
-        return self.cache.get(key)
+        if key in self.cache:
+            # Update access order (move to end = most recently used)
+            if key in self.access_order:
+                self.access_order.remove(key)
+            self.access_order.append(key)
+            return self.cache.get(key)
+        return None
     
     def set(self, input_dict, result):
-        """Cache the result."""
+        """Cache the result using LRU eviction policy."""
         key = self._get_key(input_dict)
-        # Simple LRU implementation - clear cache if too large
-        if len(self.cache) >= self.max_size:
-            self.cache.clear()  
+        
+        # If cache is full, remove least recently used item
+        if len(self.cache) >= self.max_size and key not in self.cache:
+            if self.access_order:  # Make sure we have items to remove
+                lru_key = self.access_order.pop(0)  # Remove first (least recently used)
+                if lru_key in self.cache:
+                    del self.cache[lru_key]
+        
+        # Add new item to cache and update access order
         self.cache[key] = result
+        
+        # Update access order
+        if key in self.access_order:
+            self.access_order.remove(key)
+        self.access_order.append(key)  # Add to end (most recently used)
 
 class ParserFactory:
     """Factory class to create parsers for each section of the syllabus."""
@@ -384,7 +401,7 @@ class SyllabusGeneratorPipeline:
         self.cache = LLMCache()  # Initialize the cache  
 
     def compile(self) -> dict:
-        """Compile a hybrid pipeline with sequential and parallel branches."""
+        """Compile a hybrid pipeline with sequential and parallel components."""
         try:
             parsers = ParserFactory.create_parsers()
             chain_builder = ChainBuilder(self.model, parsers, self.cache, self.verbose)
@@ -475,7 +492,7 @@ def resume_course_content(course_content: List[CourseContentItem]) -> dict:
         
     Returns:
         dict: Resumed course content with course length and topics
-    """
+    """ 
     course_length = {}
     course_topics = ""
     for content_item in course_content:
@@ -485,7 +502,7 @@ def resume_course_content(course_content: List[CourseContentItem]) -> dict:
             course_length[unit_time] += 1
         else:
             course_length[unit_time] = 1
-        course_topics += f"{unit_time_value} {unit_time}: {['topic']}\n"
+        course_topics += f"{unit_time_value} {unit_time}: {content_item['topic']}\n"
     
     return {
         "course_length": "".join([f"{v} {k}, " for k, v in course_length.items()])[:-2],
@@ -499,7 +516,7 @@ class SyllabusGenerator:
     Uses configurable error thresholds to determine if enough sections were 
     successfully generated.
     """
-    def __init__(self , error_threshold:float=0.8, verbose=False):
+    def __init__(self , error_threshold:float=0.3, verbose=False):
         self.verbose = verbose
         self.error_threshold = error_threshold
 
@@ -529,7 +546,7 @@ class SyllabusGenerator:
             request_dict = request_args.to_dict()
 
             # Start a trace for the pipeline. This will log all steps and errors in one root trace.
-            with ls.trace("Syllabus Pipeline", "chain", project_name="syllabus_generator", inputs=request_dict) as rt:
+            with ls.trace("Syllabus Generator Pipeline", "chain", project_name="syllabus_generator", inputs=request_dict) as rt:
                 # --- Step 1: Generate course_information ---
                 logger.info("Generating course information...") if verbose else None
                 course_information = pipeline["sequential"]["course_information"].invoke(request_dict)
@@ -552,18 +569,28 @@ class SyllabusGenerator:
                 logger.info("Generating course content...") if verbose else None
                 course_content = pipeline["sequential"]["course_content"].invoke(request_dict)
 
-                if course_description_objectives.get("status") != "failed":
-                    # Resuming course content with course length and topics for course_schedule
-                    request_dict["course_resumed_content"] = resume_course_content(course_content)
+                if isinstance(course_content, list) and len(course_content) > 0 and course_description_objectives.get("status") != "failed":
+                    # Only resume course content if it's a valid list, not a fallback error response
+                    try:
+                        request_dict["course_resumed_content"] = resume_course_content(course_content)
+                    except Exception as e:
+                        logger.warning(f"Failed to resume course content: {e}")
+                        request_dict["course_resumed_content"] = {
+                            "course_length": "Not specified",
+                            "course_topics": "Topics will be determined based on course objectives and content."
+                        }
                 else:
-                    # Fallback to empty content if the parser fails
-                    request_dict["course_resumed_content"] = ""
+                    # Fallback to more informative content if the parser fails
+                    request_dict["course_resumed_content"] = {
+                        "course_length": "Not specified",
+                        "course_topics": "Topics will be determined based on course objectives and content."
+                    }
 
                 # --- Step 4: Generate policies_procedures ---
                 logger.info("Generating policies and procedures...") if verbose else None
                 policies_procedures = pipeline["sequential"]["policies_procedures"].invoke(request_dict)
 
-                # --- Step 5: Generate parallel outputs for assessment, learning resources, course schedule ---
+                # --- Step 5: # Create a trace for the parallel components
                 logger.info("Generating assessment, learning resources, and course schedule...") if verbose else None
                 parallel_outputs = pipeline["parallel"].invoke(request_dict)
 
