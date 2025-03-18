@@ -298,13 +298,13 @@ class PromptFactory:
             ),
             input_variables=["course_outline", "lang", "course_title", "grade_level", "course_content"]
         )
-
 class LLMCache:
-    """Simple cache for LLM responses to reduce redundant calls."""
+    """LRU cache for LLM responses to reduce redundant calls."""
     
     def __init__(self, max_size=100):
         self.cache = {}
         self.max_size = max_size
+        self.access_order = []  # Track access order for LRU implementation
     
     def _get_key(self, input_dict):
         """Create a deterministic hash from the input dictionary."""
@@ -315,15 +315,32 @@ class LLMCache:
     def get(self, input_dict):
         """Retrieve cached result if available."""
         key = self._get_key(input_dict)
-        return self.cache.get(key)
+        if key in self.cache:
+            # Update access order (move to end = most recently used)
+            if key in self.access_order:
+                self.access_order.remove(key)
+            self.access_order.append(key)
+            return self.cache.get(key)
+        return None
     
     def set(self, input_dict, result):
-        """Cache the result."""
+        """Cache the result using LRU eviction policy."""
         key = self._get_key(input_dict)
-        # Simple LRU implementation - clear cache if too large
-        if len(self.cache) >= self.max_size:
-            self.cache.clear()  
+        
+        # If cache is full, remove least recently used item
+        if len(self.cache) >= self.max_size and key not in self.cache:
+            if self.access_order:  # Make sure we have items to remove
+                lru_key = self.access_order.pop(0)  # Remove first (least recently used)
+                if lru_key in self.cache:
+                    del self.cache[lru_key]
+        
+        # Add new item to cache and update access order
         self.cache[key] = result
+        
+        # Update access order
+        if key in self.access_order:
+            self.access_order.remove(key)
+        self.access_order.append(key)  # Add to end (most recently used)
 
 class ParserFactory:
     """Factory class to create parsers for each section of the syllabus."""
@@ -497,6 +514,7 @@ class SyllabusGeneratorPipeline:
 
     def compile(self) -> List[Runnable]:
         """Compile the pipeline and return a list of runnables in execution order."""
+
         try:
             parsers = ParserFactory.create_parsers()
             chain_builder = ChainBuilder(self.model, parsers, self.cache, self.verbose)
@@ -529,31 +547,6 @@ class SyllabusGeneratorPipeline:
             logger.error(f"Failed to compile pipeline: {e}")
             raise CompilePipelineError(str(e))
 
-def resume_course_content(course_content: List[CourseContentItem]) -> dict:
-    """
-    Resume the course content with course length and topics for course schedule.
-    
-    Args:
-        course_content: List of CourseContentItem objects
-        
-    Returns:
-        dict: Resumed course content with course length and topics
-    """
-    course_length = {}
-    course_topics = ""
-    for content_item in course_content:
-        unit_time = content_item["unit_time"]   
-        unit_time_value = content_item["unit_time_value"]
-        if unit_time in course_length:
-            course_length[unit_time] += unit_time_value
-        else:
-            course_length[unit_time] = unit_time_value
-        course_topics += f"{unit_time_value} {unit_time}: {['topic']}\n"
-    
-    return {
-        "course_length": "".join([f"{v} {k}, " for k, v in course_length.items()])[:-2],
-        "course_topics": course_topics
-    }
 class SyllabusGenerator:
     """
     Main class responsible for generating complete syllabuses using LLM.
@@ -562,7 +555,9 @@ class SyllabusGenerator:
     Uses configurable error thresholds to determine if enough sections were 
     successfully generated.
     """
+
     def __init__(self, error_threshold:float=0.8, verbose=False):
+
         self.verbose = verbose
         self.error_threshold = error_threshold
 
@@ -623,6 +618,7 @@ class SyllabusGenerator:
                         # Update request_dict and results with the step name as key
                         if isinstance(result, dict) or isinstance(result, list):
                             results[step_name] = result 
+         
 
                 # Create the final syllabus model
                 model = SyllabusSchema(
