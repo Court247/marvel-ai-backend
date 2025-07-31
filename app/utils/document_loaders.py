@@ -52,7 +52,7 @@ def get_docs(file_url: str, file_type: str, lang: str = "en", verbose=True):
     if file_type in FILE_TYPES_TO_CHECK:
         try:
             # Make a HEAD request to get content type
-            head_response = requests.head(file_url, allow_redirects=True)
+            head_response = requests.head(file_url, allow_redirects=True, timeout=60)
             logger.info(f"HEAD request response: {head_response.status_code}")
             content_type = head_response.headers.get('Content-Type') 
             logger.info(f"Content-Type: {content_type}")
@@ -450,7 +450,7 @@ def generate_docs_from_audio(audio_url: str, verbose=False):
 
     # Download the file from the URL and save it to a temporary file
     try:
-        response = requests.get(audio_url)
+        response = requests.get(audio_url, timeout=60)
         response.raise_for_status()  # Ensure the request was successful
     except (requests.exceptions.RequestException) as req_err:
         logger.error(f"Error occurred while downloading audio: {req_err}")
